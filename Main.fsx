@@ -8,8 +8,18 @@ open dotenv.net
 open FSharp.Data
 open FsHttp
 
-if String.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable "target_playlist_id") then
+let getEnv name =
+    match Environment.GetEnvironmentVariable name with
+    | null | "" -> None
+    | value -> Some value
+
+// Load .env if environment variables are not otherwise present.
+if getEnv "client_id" |> Option.isNone then
     DotEnv.Load()
+
+let requireEnv name =
+    getEnv name |> Option.defaultWith (fun () -> failwithf "Missing environment variable: %s" name)
+
 
 let SpotifyBaseURI = "https://api.spotify.com/v1"
 let PlaylistId = Environment.GetEnvironmentVariable "target_playlist_id"
@@ -21,32 +31,31 @@ let DaysSinceStart =
     |> fun startDate -> (DateTime.Now - startDate).TotalDays
     |> Convert.ToInt32
 
-let GetAccessToken () = task {
+// Use refresh token to get a new access token for this session
+// https://developer.spotify.com/documentation/web-api/tutorials/refreshing-tokens
+let getAccessToken () : Async<string> = async {
 
-    let refreshToken = Environment.GetEnvironmentVariable "refresh_token"
-    let clientId = Environment.GetEnvironmentVariable "client_id"
-    let clientSecret = Environment.GetEnvironmentVariable "client_secret"
+    let refreshToken = requireEnv "refresh_token"
+    let clientId = requireEnv "client_id"
+    let clientSecret = requireEnv "client_secret"
 
-    printfn "Retrieving a new access token..."
-    let newToken = 
+    let! response =
         http {
             POST "https://accounts.spotify.com/api/token"
             AuthorizationUserPw clientId clientSecret
-
             body
-
             formUrlEncoded [
                 "grant_type", "refresh_token"
                 "refresh_token", refreshToken
             ]
-        } 
-        |> Request.send 
-        |> Response.assert2xx
-        |> Response.toText
-        |> NewToken.Parse
-    printfn "Successfully found access token: \"%s\"" newToken.AccessToken
+        }
+        |> Request.sendAsync
 
-    return newToken
+    return response
+    |> Response.assert2xx
+    |> Response.toText
+    |> NewToken.Parse
+    |> fun newToken -> newToken.AccessToken
 }
 
 let GetAlbum accessToken albumId = task {

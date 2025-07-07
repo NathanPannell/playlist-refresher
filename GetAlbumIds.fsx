@@ -96,7 +96,7 @@ let main _ =
     async {
         let! accessToken = getAccessToken ()
         let! albumIds = getAlbumIds accessToken 0
-        File.WriteAllLines(outputFilePath, albumIds)
+        File.WriteAllLines(outputFilePath, List.distinct(albumIds))
     }
     |> Async.RunSynchronously
     0
