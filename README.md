@@ -5,8 +5,6 @@ It updates automatically at **3:14 AM PST** with a new pick from [Tom Moon’s _
 
 [Follow the Playlist on Spotify](https://open.spotify.com/playlist/42nArFgYJDbc0f6VzHfCdZ)
 
-## [![Daily Playlist Refresh](https://github.com/nathanpannell/record-of-the-day/actions/workflows/main.yml/badge.svg)](https://github.com/nathanpannell/record-of-the-day/actions/workflows/main.yml)
-
 ## Inspiration
 
 This project was created out of a desire to explore great music without friction.
@@ -24,6 +22,8 @@ Every day, the script:
 3. Renames the playlist with the album title and release info
 
 Everything is handled via the Spotify Web API using a scheduled GitHub Action!
+
+## [![Daily Playlist Refresh](https://github.com/nathanpannell/record-of-the-day/actions/workflows/main.yml/badge.svg)](https://github.com/nathanpannell/record-of-the-day/actions/workflows/main.yml)
 
 ---
 
