@@ -20,10 +20,5 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install F# Interactive (fsi) and .NET Interactive Tools
-        run: |
-          apt-get update
-          apt-get install -y fsharp
-
       - name: Run F# Script
         run: dotnet fsi ./Main.fsx
