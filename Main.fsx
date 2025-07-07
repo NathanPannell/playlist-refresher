@@ -8,7 +8,8 @@ open dotenv.net
 open FSharp.Data
 open FsHttp
 
-DotEnv.Load()
+if String.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable "target_playlist_id") then
+    DotEnv.Load()
 
 let SpotifyBaseURI = "https://api.spotify.com/v1"
 let PlaylistId = Environment.GetEnvironmentVariable "target_playlist_id"
@@ -68,7 +69,7 @@ let GetAlbum accessToken albumId = task {
 
 let GetNextAlbumId () = task {
     let albumIds = File.ReadAllLines "album_ids.txt"
-    return albumIds[DaysSinceStart]
+    return albumIds[DaysSinceStart % albumIds.Length] // Loop after all ids are exhausted
 }
 
 let UpdatePlaylistTracks accessToken tracks = task {

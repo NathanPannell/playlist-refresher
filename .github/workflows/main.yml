@@ -25,4 +25,4 @@ jobs:
           apt-get install -y fsharp
 
       - name: Run F# Script
-        run: dotnet fsi ./Program.fsx
+        run: dotnet fsi ./Main.fsx
