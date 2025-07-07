@@ -1,0 +1,28 @@
+name: Daily Playlist Refresh
+
+on:
+  schedule:
+    - cron: "14 10 * * *"
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/dotnet/sdk:8.0
+    env:
+      refresh_token: ${{ secrets.REFRESH_TOKEN }}
+      client_id: ${{ secrets.CLIENT_ID }}
+      client_secret: ${{ secrets.CLIENT_SECRET }}
+      target_playlist_id: ${{ secrets.TARGET_PLAYLIST_ID }}
+      start_date: ${{ secrets.START_DATE }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install F# Interactive (fsi) and .NET Interactive Tools
+        run: |
+          apt-get update
+          apt-get install -y fsharp
+
+      - name: Run F# Script
+        run: dotnet fsi ./Program.fsx
