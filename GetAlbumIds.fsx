@@ -8,69 +8,91 @@ open dotenv.net
 open FSharp.Data
 open FsHttp
 
-DotEnv.Load()
+let getEnv name =
+    match Environment.GetEnvironmentVariable name with
+    | null | "" -> None
+    | value -> Some value
 
-let SpotifyBaseURI = "https://api.spotify.com/v1"
-let SourcePlaylistId = "4KQDdglJ7HGcqNozbJTlM3"
+// Load .env if environment variables are not otherwise present.
+if getEnv "client_id" |> Option.isNone then
+    DotEnv.Load()
+
+let requireEnv name =
+    getEnv name |> Option.defaultWith (fun () -> failwithf "Missing environment variable: %s" name)
+
+
+
+let sourcePlaylistId = "4KQDdglJ7HGcqNozbJTlM3" // 1000 Recordings to Hear Before You Die (Tom Moon): Album Index
+let spotifyBaseUri = "https://api.spotify.com/v1"
 type NewToken = JsonProvider<"sample_json/new_token.json">
 type PlaylistItems = JsonProvider<"sample_json/playlist_items.json">
 
-let GetAccessToken () = task {
+let getAccessToken () : Async<string> = async {
 
-    let refreshToken = Environment.GetEnvironmentVariable "refresh_token"
-    let clientId = Environment.GetEnvironmentVariable "client_id"
-    let clientSecret = Environment.GetEnvironmentVariable "client_secret"
+    let refreshToken = requireEnv "refresh_token"
+    let clientId = requireEnv "client_id"
+    let clientSecret = requireEnv "client_secret"
 
     printfn "Retrieving a new access token..."
-    let newToken = 
+    let! response =
         http {
             POST "https://accounts.spotify.com/api/token"
             AuthorizationUserPw clientId clientSecret
-
             body
-
             formUrlEncoded [
                 "grant_type", "refresh_token"
                 "refresh_token", refreshToken
             ]
-        } 
-        |> Request.send 
-        |> Response.assert2xx
-        |> Response.toText
-        |> NewToken.Parse
-    printfn "Successfully found access token: \"%s\"" newToken.AccessToken
+        }
+        |> Request.sendAsync
 
-    return newToken
+    return response
+    |> Response.assert2xx
+    |> Response.toText
+    |> NewToken.Parse
+    |> fun newToken ->
+        printfn "Successfully found access token: %s" newToken.AccessToken
+        newToken.AccessToken
 }
 
-let rec GetPlaylistContents (accessToken: string) (offset: int) = task {
-    let playlistItems = 
+let rec getPlaylistContents (accessToken: string) (offset: int) : Async<list<string>> = async {
+    
+    printfn "Retrieving items %d-%d from playlist..." offset (offset + 49)
+    let! response = 
         http {
-            GET $"{SpotifyBaseURI}/playlists/{SourcePlaylistId}/tracks"
+            GET $"{spotifyBaseUri}/playlists/{sourcePlaylistId}/tracks"
             AuthorizationBearer accessToken
             query [
                 "limit", "50"
                 "offset", offset.ToString()
             ]
         }
-        |> Request.send
+        |> Request.sendAsync
+
+    let playlistItems = 
+        response
         |> Response.assert2xx
         |> Response.toText
         |> PlaylistItems.Parse
 
     let albumIds = 
         playlistItems.Items
-        |> Array.map   _.Track.Album.Id
+        |> Array.map _.Track.Album.Id
         |> Array.toList
 
     if playlistItems.Total > offset + 50 then
-        let! rest = GetPlaylistContents accessToken (offset+50)
+        let! rest = getPlaylistContents accessToken (offset+50)
         return albumIds @ rest
     else
         return albumIds
 }
 
-// Actual execution
-let accessToken = GetAccessToken().Result.AccessToken
-let playlistItems = GetPlaylistContents accessToken 0 |> fun task -> task.Result
-File.WriteAllLines ("album_ids.txt", playlistItems)
+let main _ =
+    async {
+        let! accessToken = getAccessToken ()
+        let! albumIds = getPlaylistContents accessToken 0
+        File.WriteAllLines("album_ids.txt", albumIds)
+    }
+    |> Async.RunSynchronously
+    0
+main ()
