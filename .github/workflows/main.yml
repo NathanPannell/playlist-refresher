@@ -3,6 +3,7 @@ name: Daily Playlist Refresh
 on:
   schedule:
     - cron: "14 10 * * *"
+  workflow_dispatch:
 
 jobs:
   refresh:
