@@ -129,5 +129,5 @@ let tracks = album.Tracks.Items |> Array.map (fun item -> item.Id)
 UpdatePlaylistTracks accessToken tracks 
 
 let name = $"Day {DaysSinceStart}: {album.Name}"
-let description = $"Released {album.ReleaseDate.ToShortDateString()} by {album.Artists[0].Name}"
+let description = $"This {album.AlbumType} was released by {album.Artists[0].Name} on {album.ReleaseDate.ToLongDateString()}"
 UpdatePlaylistDetails accessToken name description
