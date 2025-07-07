@@ -8,6 +8,7 @@ open dotenv.net
 open FSharp.Data
 open FsHttp
 
+
 let getEnv name =
     match Environment.GetEnvironmentVariable name with
     | null | "" -> None
@@ -21,15 +22,16 @@ let requireEnv name =
     getEnv name |> Option.defaultWith (fun () -> failwithf "Missing environment variable: %s" name)
 
 
-let SpotifyBaseURI = "https://api.spotify.com/v1"
-let PlaylistId = Environment.GetEnvironmentVariable "target_playlist_id"
-type NewToken = JsonProvider<"sample_json/new_token.json">
-type Album = JsonProvider<"sample_json/get_album.json">
-let DaysSinceStart = 
+let spotifyBaseURI = "https://api.spotify.com/v1"
+let playlistId = Environment.GetEnvironmentVariable "target_playlist_id"
+let daysSinceStart = 
     Environment.GetEnvironmentVariable "start_date"
     |> DateTime.Parse
     |> fun startDate -> (DateTime.Now - startDate).TotalDays
     |> Convert.ToInt32
+type Album = JsonProvider<"sample_json/get_album.json">
+type NewToken = JsonProvider<"sample_json/new_token.json">
+
 
 // Use refresh token to get a new access token for this session
 // https://developer.spotify.com/documentation/web-api/tutorials/refreshing-tokens
@@ -58,56 +60,53 @@ let getAccessToken () : Async<string> = async {
     |> fun newToken -> newToken.AccessToken
 }
 
-let GetAlbum accessToken albumId = task {
-    printfn "Retrieving album with id: %s..." albumId
 
-    let album = 
+// Fetches album object. Used for generating a list of tracks and album metadata
+let getAlbum (accessToken: string) (albumId: string) = async {
+
+    let! response = 
         http {
-            GET (SpotifyBaseURI + "/albums/" + albumId)
+            GET (spotifyBaseURI + "/albums/" + albumId)
             AuthorizationBearer accessToken
         }
-        |> Request.send
-        |> Response.assert2xx
-        |> Response.toText
-        |> Album.Parse
+        |> Request.sendAsync
 
-    printfn "Successfully found album id=%s with %d/%d tracks" album.Name album.Tracks.Items.Length album.TotalTracks
-
-    return album
+    return response
+    |> Response.assert2xx
+    |> Response.toText
+    |> Album.Parse
 }
 
-let GetNextAlbumId () = task {
+
+let getNextAlbumId () : Async<string> = async {
     let albumIds = File.ReadAllLines "album_ids.txt"
-    return albumIds[DaysSinceStart % albumIds.Length] // Loop after all ids are exhausted
+    return albumIds[daysSinceStart % albumIds.Length] // Loop after all ids are exhausted
 }
 
-let UpdatePlaylistTracks accessToken tracks = task {
-    let formattedTracks = 
-        tracks
-        |> Array.map (fun trackId -> "spotify:track:" + trackId)
-        |> String.concat ","
 
-    printfn "Updating playlist with %d tracks..." tracks.Length
-    let response =
+// Overwrites playlist items with provided track ids
+let updatePlaylistTracks (accessToken: string) (trackIds: string) : Async<Response> = async {
+    let! response =
         http {
-            PUT (SpotifyBaseURI + "/playlists/" + PlaylistId + "/tracks")
+            PUT (spotifyBaseURI + "/playlists/" + playlistId + "/tracks")
             AuthorizationBearer accessToken
             query [
-                "uris", formattedTracks
+                "uris", trackIds
             ]
         }
-        |> Request.send
-        |> Response.assert2xx
-    printfn "Successfully updated playlist tracks"
+        |> Request.sendAsync
 
-    return ()
+    return response
+    |> Response.assert2xx
 }
 
-let UpdatePlaylistDetails accessToken name description = task {
-    printfn "Updating playlist details\nname=%s\ndesc=%s..." name description
-    let response =
+
+// Overwrites playlist name and description with those provided
+let updatePlaylistDetails (accessToken: string) (name: string) (description: string) : Async<Response> = async {
+
+    let! response =
         http {
-            PUT (SpotifyBaseURI + "/playlists/" + PlaylistId)
+            PUT (spotifyBaseURI + "/playlists/" + playlistId)
             AuthorizationBearer accessToken
 
             body
@@ -117,27 +116,29 @@ let UpdatePlaylistDetails accessToken name description = task {
                     description = description
                 |}
         }
-        |> Request.send
-        |> Response.assert2xx
-    printfn "Successfully updated playlist details"
-
-    return ()
+        |> Request.sendAsync
+    
+    return response
+    |> Response.assert2xx
 }
 
-// TODO: UpdatePlaylistImage
 
+let main _ =
+    async {
+        let! accessToken = getAccessToken ()
+        let! nextAlbumId = getNextAlbumId ()
+        let! album = getAlbum accessToken nextAlbumId
 
+        let trackIds = 
+            album.Tracks.Items 
+            |> Array.map (fun item -> $"spotify:track:{item.Id}")
+            |> String.concat ","
+        do! updatePlaylistTracks accessToken trackIds |> Async.Ignore
 
-
-// Actual execution
-
-let accessToken = GetAccessToken().Result.AccessToken
-let nextAlbumId = GetNextAlbumId().Result
-let album = GetAlbum accessToken nextAlbumId |> fun task -> task.Result
-
-let tracks = album.Tracks.Items |> Array.map (fun item -> item.Id)
-UpdatePlaylistTracks accessToken tracks 
-
-let name = $"Day {DaysSinceStart}: {album.Name}"
-let description = $"This {album.AlbumType} was released by {album.Artists[0].Name} on {album.ReleaseDate.ToLongDateString()}"
-UpdatePlaylistDetails accessToken name description
+        let name = $"Day {daysSinceStart}: {album.Name}"
+        let description = $"This {album.AlbumType} was released by {album.Artists[0].Name} on {album.ReleaseDate.ToLongDateString()}"
+        do! updatePlaylistDetails accessToken name description |> Async.Ignore
+    }
+    |> Async.RunSynchronously
+    0
+main ()
