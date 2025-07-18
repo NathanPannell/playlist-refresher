@@ -136,7 +136,7 @@ let main _ =
         do! updatePlaylistTracks accessToken trackIds |> Async.Ignore
 
         let name = $"Day {daysSinceStart}: {album.Name}"
-        let description = $"This {album.AlbumType} was released by {album.Artists[0].Name} on {album.ReleaseDate.ToLongDateString()}"
+        let description = $"This {album.AlbumType} was released by {album.Artists[0].Name} on {album.ReleaseDate}"
         do! updatePlaylistDetails accessToken name description |> Async.Ignore
     }
     |> Async.RunSynchronously
